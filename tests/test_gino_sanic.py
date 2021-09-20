@@ -3,8 +3,11 @@ import os
 import ssl
 
 import gino
+import string
+import random
 import pytest
 import sanic
+
 from gino.ext.sanic import Gino
 from sanic.response import text, json
 
@@ -20,14 +23,19 @@ PG_URL = "postgresql://{user}:{password}@{host}:{port}/{database}".format(**DB_A
 _MAX_INACTIVE_CONNECTION_LIFETIME = 59.0
 
 
+def random_name(length=10):
+    letters = string.ascii_uppercase
+    return "".join(random.choice(letters) for i in range(length))
+
+
 def teardown_module():
     # sanic server will close the loop during shutdown
     asyncio.set_event_loop(asyncio.new_event_loop())
 
 
 # noinspection PyShadowingNames
-async def _app(config):
-    app = sanic.Sanic()
+async def _app(config, app_name):
+    app = sanic.Sanic(name=app_name)
     app.config.update(config)
     app.config.update(
         {
@@ -45,7 +53,7 @@ async def _app(config):
         id = db.Column(db.BigInteger(), primary_key=True)
         nickname = db.Column(db.Unicode(), default="noname")
 
-    @app.route("/")
+    @app.route("/", methods=["GET"])
     async def root(request):
         conn = await request["connection"].get_raw_connection()
         # noinspection PyProtectedMember
@@ -104,7 +112,8 @@ async def app():
             "DB_USER": DB_ARGS["user"],
             "DB_PASSWORD": DB_ARGS["password"],
             "DB_DATABASE": DB_ARGS["database"],
-        }
+        },
+        app_name=random_name()
     ):
         yield a
 
@@ -119,14 +128,15 @@ async def app_ssl(ssl_ctx):
             "DB_PASSWORD": DB_ARGS["password"],
             "DB_DATABASE": DB_ARGS["database"],
             "DB_SSL": ssl_ctx,
-        }
+        },
+        app_name=random_name()
     ):
         yield a
 
 
 @pytest.fixture
 async def app_dsn():
-    async for a in _app({"DB_DSN": PG_URL}):
+    async for a in _app({"DB_DSN": PG_URL},app_name=random_name()):
         yield a
 
 
